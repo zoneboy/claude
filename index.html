@@ -92,6 +92,158 @@
       font-size: 0.9rem;
     }
     
+    #settingsBtn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(33, 150, 243, 0.9);
+      color: #fff;
+      border: none;
+      padding: 15px 25px;
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+      z-index: 10;
+    }
+    
+    #settingsBtn:hover {
+      background: rgba(33, 150, 243, 1);
+    }
+    
+    #settingsPanel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      z-index: 20;
+      border-radius: 20px 20px 0 0;
+    }
+    
+    #settingsPanel.open {
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    
+    .settings-header {
+      padding: 20px;
+      border-bottom: 2px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #2196F3;
+      color: white;
+      border-radius: 20px 20px 0 0;
+    }
+    
+    .settings-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+    
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 2rem;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .settings-content {
+      padding: 20px;
+      color: #333;
+    }
+    
+    .price-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .form-group label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #555;
+    }
+    
+    .form-group select,
+    .form-group input {
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: white;
+    }
+    
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: #2196F3;
+    }
+    
+    .update-btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .update-btn:hover {
+      background: #45a049;
+    }
+    
+    .price-list {
+      margin-top: 30px;
+    }
+    
+    .price-list h3 {
+      margin-bottom: 15px;
+      color: #333;
+    }
+    
+    .price-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .price-item-name {
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .price-item-price {
+      font-size: 1.1rem;
+      color: #4CAF50;
+      font-weight: 700;
+    }
+    
     .loading {
       color: #FFC107;
     }
@@ -126,29 +278,49 @@
     </div>
     <div id="status" class="loading">Initializing...</div>
     <div id="confidence" style="display:none;">Confidence: <span id="confidenceValue">0</span>%</div>
+    
+    <button id="settingsBtn">⚙️ Update Prices</button>
+    
+    <div id="settingsPanel">
+      <div class="settings-header">
+        <h2>Price Management</h2>
+        <button class="close-btn" onclick="closeSettings()">×</button>
+      </div>
+      <div class="settings-content">
+        <form class="price-form" onsubmit="updatePrice(event)">
+          <div class="form-group">
+            <label for="productSelect">Select Product</label>
+            <select id="productSelect" required>
+              <option value="">-- Choose a product --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="priceInput">New Price (₦)</label>
+            <input type="number" id="priceInput" placeholder="Enter price" required min="0" step="0.01">
+          </div>
+          <button type="submit" class="update-btn">💾 Update Price</button>
+        </form>
+        
+        <div class="price-list">
+          <h3>Current Prices</h3>
+          <div id="priceListContainer"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.2.0/tf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
   
   <script>
-    // PRICE MAPPING - Edit this to match your model's class names
-    const PRICE_MAP = {
-      'Hollandia Evap 120g': '₦500',
-      'Beloxxi Cream cracker': '₦50',
-      'Hollandia 50g': '₦250',
-      'three crown triangle': '₦3500',
-      // 'Bread': '₦500',
-      // 'Milk': '₦1200',
-      // Add more products as needed
-    };
-
-    const CONFIDENCE_THRESHOLD = 0.80; // 80%
+    const CONFIDENCE_THRESHOLD = 0.80;
     const MODEL_PATH = './my_model/';
+    const STORAGE_KEY = 'price_scanner_prices';
     
     let model, video, canvas;
     let isRunning = false;
-    let classifier;
+    let classNames = [];
+    let priceMap = {};
     
     const statusEl = document.getElementById('status');
     const overlayEl = document.getElementById('overlay');
@@ -156,17 +328,122 @@
     const productPriceEl = document.getElementById('productPrice');
     const confidenceEl = document.getElementById('confidence');
     const confidenceValueEl = document.getElementById('confidenceValue');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const productSelect = document.getElementById('productSelect');
+    const priceInput = document.getElementById('priceInput');
+    
+    // Load saved prices from localStorage
+    function loadPrices() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        priceMap = JSON.parse(saved);
+      } else {
+        // Default prices
+        priceMap = {
+          'Milo_Small': 400,
+          'Milo_Large': 800,
+          'Coke_Small': 200,
+          'Coke_Large': 350,
+          'Bread': 500,
+          'Milk': 1200
+        };
+      }
+    }
+    
+    // Save prices to localStorage
+    function savePrices() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(priceMap));
+    }
+    
+    // Populate dropdown with class names from metadata
+    function populateDropdown() {
+      productSelect.innerHTML = '<option value="">-- Choose a product --</option>';
+      classNames.forEach(className => {
+        const option = document.createElement('option');
+        option.value = className;
+        option.textContent = className.replace(/_/g, ' ');
+        productSelect.appendChild(option);
+      });
+    }
+    
+    // Display current prices
+    function displayPrices() {
+      const container = document.getElementById('priceListContainer');
+      container.innerHTML = '';
+      
+      classNames.forEach(className => {
+        const price = priceMap[className] || 0;
+        const item = document.createElement('div');
+        item.className = 'price-item';
+        item.innerHTML = `
+          <span class="price-item-name">${className.replace(/_/g, ' ')}</span>
+          <span class="price-item-price">₦${price.toLocaleString()}</span>
+        `;
+        container.appendChild(item);
+      });
+    }
+    
+    // Toggle settings panel
+    settingsBtn.addEventListener('click', () => {
+      settingsPanel.classList.toggle('open');
+      displayPrices();
+    });
+    
+    function closeSettings() {
+      settingsPanel.classList.remove('open');
+    }
+    
+    // Update price
+    function updatePrice(event) {
+      event.preventDefault();
+      const product = productSelect.value;
+      const price = parseFloat(priceInput.value);
+      
+      if (product && price >= 0) {
+        priceMap[product] = price;
+        savePrices();
+        displayPrices();
+        
+        // Reset form
+        productSelect.value = '';
+        priceInput.value = '';
+        
+        // Show success feedback
+        alert(`✅ Price updated: ${product.replace(/_/g, ' ')} = ₦${price.toLocaleString()}`);
+      }
+    }
     
     async function init() {
       try {
+        loadPrices();
+        
         statusEl.textContent = 'Loading model...';
         
-        // Load model using TensorFlow.js directly
+        // Load model
         model = await tf.loadLayersModel(MODEL_PATH + 'model.json');
         
         // Load metadata
         const metadataResponse = await fetch(MODEL_PATH + 'metadata.json');
         const metadata = await metadataResponse.json();
+        
+        // Extract class names from metadata
+        if (metadata.labels) {
+          classNames = metadata.labels;
+        } else {
+          // Fallback: use keys from priceMap
+          classNames = Object.keys(priceMap);
+        }
+        
+        // Initialize price map for new classes
+        classNames.forEach(className => {
+          if (!(className in priceMap)) {
+            priceMap[className] = 0;
+          }
+        });
+        
+        populateDropdown();
+        savePrices();
         
         statusEl.textContent = 'Starting camera...';
         
@@ -184,11 +461,9 @@
         video.srcObject = stream;
         video.play();
         
-        // Replace placeholder with video
         document.getElementById('webcam').replaceWith(video);
         video.id = 'webcam';
         
-        // Create canvas for processing
         canvas = document.createElement('canvas');
         canvas.width = 224;
         canvas.height = 224;
@@ -211,20 +486,16 @@
       if (!isRunning) return;
       
       try {
-        // Draw video frame to canvas
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, 224, 224);
         
-        // Prepare image tensor
         let imgTensor = tf.browser.fromPixels(canvas);
         imgTensor = imgTensor.expandDims(0);
         imgTensor = imgTensor.toFloat().div(127.5).sub(1);
         
-        // Run prediction
         const predictions = await model.predict(imgTensor).data();
         imgTensor.dispose();
         
-        // Find max prediction
         let maxIdx = 0;
         let maxProb = predictions[0];
         for (let i = 1; i < predictions.length; i++) {
@@ -237,15 +508,12 @@
         const confidence = Math.round(maxProb * 100);
         confidenceValueEl.textContent = confidence;
         
-        // Get class names from PRICE_MAP
-        const classNames = Object.keys(PRICE_MAP);
-        
         if (maxProb >= CONFIDENCE_THRESHOLD && classNames[maxIdx]) {
           const className = classNames[maxIdx];
-          const price = PRICE_MAP[className];
+          const price = priceMap[className] || 0;
           
           productNameEl.textContent = className.replace(/_/g, ' ');
-          productPriceEl.textContent = price;
+          productPriceEl.textContent = '₦' + price.toLocaleString();
           overlayEl.classList.add('visible');
         } else {
           overlayEl.classList.remove('visible');
@@ -267,7 +535,6 @@
       });
     }
     
-    // Start when libraries are loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
     } else {
