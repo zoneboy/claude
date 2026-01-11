@@ -78,6 +78,7 @@
       padding: 10px 20px;
       border-radius: 10px;
       font-size: 0.9rem;
+      max-width: 80%;
     }
     
     #confidence {
@@ -123,12 +124,12 @@
       <div id="productName"></div>
       <div id="productPrice"></div>
     </div>
-    <div id="status" class="loading">Loading libraries...</div>
+    <div id="status" class="loading">Initializing...</div>
     <div id="confidence" style="display:none;">Confidence: <span id="confidenceValue">0</span>%</div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.6/dist/teachablemachine-image.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.2.0/tf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
   
   <script>
     // PRICE MAPPING - Edit this to match your model's class names
@@ -145,8 +146,9 @@
     const CONFIDENCE_THRESHOLD = 0.80; // 80%
     const MODEL_PATH = './my_model/';
     
-    let model, webcam, maxPredictions;
+    let model, video, canvas;
     let isRunning = false;
+    let classifier;
     
     const statusEl = document.getElementById('status');
     const overlayEl = document.getElementById('overlay');
@@ -155,100 +157,122 @@
     const confidenceEl = document.getElementById('confidence');
     const confidenceValueEl = document.getElementById('confidenceValue');
     
-    // Wait for libraries to load
-    function waitForLibraries() {
-      return new Promise((resolve) => {
-        const checkLibraries = setInterval(() => {
-          if (typeof tf !== 'undefined' && typeof tmImage !== 'undefined') {
-            clearInterval(checkLibraries);
-            resolve();
-          }
-        }, 100);
-      });
-    }
-    
     async function init() {
       try {
-        // Wait for TensorFlow.js and Teachable Machine to load
-        await waitForLibraries();
-        
         statusEl.textContent = 'Loading model...';
         
-        // Load the model and metadata
-        const modelURL = MODEL_PATH + 'model.json';
-        const metadataURL = MODEL_PATH + 'metadata.json';
+        // Load model using TensorFlow.js directly
+        model = await tf.loadLayersModel(MODEL_PATH + 'model.json');
         
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
+        // Load metadata
+        const metadataResponse = await fetch(MODEL_PATH + 'metadata.json');
+        const metadata = await metadataResponse.json();
         
         statusEl.textContent = 'Starting camera...';
         
-        // Setup webcam
-        const flip = true;
-        webcam = new tmImage.Webcam(window.innerWidth, window.innerHeight, flip);
-        await webcam.setup({ facingMode: 'environment' });
-        await webcam.play();
+        // Setup video
+        video = document.createElement('video');
+        video.setAttribute('playsinline', '');
+        video.width = window.innerWidth;
+        video.height = window.innerHeight;
         
-        document.getElementById('webcam').replaceWith(webcam.canvas);
-        webcam.canvas.id = 'webcam';
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 640, height: 480 },
+          audio: false
+        });
+        
+        video.srcObject = stream;
+        video.play();
+        
+        // Replace placeholder with video
+        document.getElementById('webcam').replaceWith(video);
+        video.id = 'webcam';
+        
+        // Create canvas for processing
+        canvas = document.createElement('canvas');
+        canvas.width = 224;
+        canvas.height = 224;
         
         statusEl.textContent = 'Ready';
         statusEl.className = 'ready';
         confidenceEl.style.display = 'block';
         
         isRunning = true;
-        window.requestAnimationFrame(loop);
+        predict();
         
       } catch (error) {
-        console.error('Error initializing:', error);
+        console.error('Error:', error);
         statusEl.textContent = 'Error: ' + error.message;
         statusEl.className = 'error';
       }
     }
     
-    async function loop() {
+    async function predict() {
       if (!isRunning) return;
       
-      webcam.update();
-      await predict();
-      window.requestAnimationFrame(loop);
-    }
-    
-    async function predict() {
-      const prediction = await model.predict(webcam.canvas);
-      
-      // Find highest confidence prediction
-      let topPrediction = prediction.reduce((max, pred) => 
-        pred.probability > max.probability ? pred : max
-      );
-      
-      const confidence = Math.round(topPrediction.probability * 100);
-      confidenceValueEl.textContent = confidence;
-      
-      // Show overlay if confidence is above threshold
-      if (topPrediction.probability >= CONFIDENCE_THRESHOLD) {
-        const className = topPrediction.className;
-        const price = PRICE_MAP[className] || 'Price not set';
+      try {
+        // Draw video frame to canvas
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 224, 224);
         
-        productNameEl.textContent = className.replace(/_/g, ' ');
-        productPriceEl.textContent = price;
-        overlayEl.classList.add('visible');
-      } else {
-        overlayEl.classList.remove('visible');
+        // Prepare image tensor
+        let imgTensor = tf.browser.fromPixels(canvas);
+        imgTensor = imgTensor.expandDims(0);
+        imgTensor = imgTensor.toFloat().div(127.5).sub(1);
+        
+        // Run prediction
+        const predictions = await model.predict(imgTensor).data();
+        imgTensor.dispose();
+        
+        // Find max prediction
+        let maxIdx = 0;
+        let maxProb = predictions[0];
+        for (let i = 1; i < predictions.length; i++) {
+          if (predictions[i] > maxProb) {
+            maxProb = predictions[i];
+            maxIdx = i;
+          }
+        }
+        
+        const confidence = Math.round(maxProb * 100);
+        confidenceValueEl.textContent = confidence;
+        
+        // Get class names from PRICE_MAP
+        const classNames = Object.keys(PRICE_MAP);
+        
+        if (maxProb >= CONFIDENCE_THRESHOLD && classNames[maxIdx]) {
+          const className = classNames[maxIdx];
+          const price = PRICE_MAP[className];
+          
+          productNameEl.textContent = className.replace(/_/g, ' ');
+          productPriceEl.textContent = price;
+          overlayEl.classList.add('visible');
+        } else {
+          overlayEl.classList.remove('visible');
+        }
+        
+      } catch (error) {
+        console.error('Prediction error:', error);
       }
+      
+      requestAnimationFrame(predict);
     }
     
-    // Register service worker for offline capability
+    // Register service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('Service Worker registered:', reg.scope))
-          .catch(err => console.error('Service Worker registration failed:', err));
+          .then(reg => console.log('Service Worker registered'))
+          .catch(err => console.error('SW error:', err));
       });
     }
     
-    // Start the app when page loads
-    window.addEventListener('load', init);
+    // Start when libraries are loaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>

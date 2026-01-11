@@ -6,8 +6,8 @@ const urlsToCache = [
   './my_model/model.json',
   './my_model/metadata.json',
   './my_model/weights.bin',
-  'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js',
-  'https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.6/dist/teachablemachine-image.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.2.0/tf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js'
 ];
 
 // Install event - cache all resources
