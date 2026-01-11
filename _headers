@@ -1,0 +1,17 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=*, microphone=()
+
+/service-worker.js
+  Cache-Control: public, max-age=0, must-revalidate
+  
+/my_model/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.json
+  Content-Type: application/json
+  
+/*.bin
+  Content-Type: application/octet-stream
