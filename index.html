@@ -123,7 +123,7 @@
       <div id="productName"></div>
       <div id="productPrice"></div>
     </div>
-    <div id="status" class="loading">Loading model...</div>
+    <div id="status" class="loading">Loading libraries...</div>
     <div id="confidence" style="display:none;">Confidence: <span id="confidenceValue">0</span>%</div>
   </div>
 
@@ -145,7 +145,7 @@
     const CONFIDENCE_THRESHOLD = 0.80; // 80%
     const MODEL_PATH = './my_model/';
     
-    let model, webcam, labelContainer, maxPredictions;
+    let model, webcam, maxPredictions;
     let isRunning = false;
     
     const statusEl = document.getElementById('status');
@@ -155,8 +155,25 @@
     const confidenceEl = document.getElementById('confidence');
     const confidenceValueEl = document.getElementById('confidenceValue');
     
+    // Wait for libraries to load
+    function waitForLibraries() {
+      return new Promise((resolve) => {
+        const checkLibraries = setInterval(() => {
+          if (typeof tf !== 'undefined' && typeof tmImage !== 'undefined') {
+            clearInterval(checkLibraries);
+            resolve();
+          }
+        }, 100);
+      });
+    }
+    
     async function init() {
       try {
+        // Wait for TensorFlow.js and Teachable Machine to load
+        await waitForLibraries();
+        
+        statusEl.textContent = 'Loading model...';
+        
         // Load the model and metadata
         const modelURL = MODEL_PATH + 'model.json';
         const metadataURL = MODEL_PATH + 'metadata.json';
@@ -230,8 +247,8 @@
       });
     }
     
-    // Start the app
-    init();
+    // Start the app when page loads
+    window.addEventListener('load', init);
   </script>
 </body>
-</html>n
+</html>
